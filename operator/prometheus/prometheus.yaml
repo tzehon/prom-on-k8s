@@ -1,0 +1,70 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus
+  labels:
+    prometheus: prometheus
+spec:
+  replicas: 2
+  serviceAccountName: prometheus
+  serviceMonitorSelector:
+    matchLabels:
+      team: frontend
+  alerting:
+    alertmanagers:
+    - namespace: default
+      name: alertmanager
+      port: web
+  containers:
+    - name: "prometheus-storage-bigquery"
+      image: "quay.io/kohlstechnology/prometheus_bigquery_remote_storage_adapter:latest"
+      env:
+        - name: PROMBQ_GCP_JSON
+          value: "/var/run/secret/cloud.google.com/key.json"
+        - name: "PROMBQ_GCP_PROJECT_ID"
+          value: "tth-flink-gke"
+        - name: PROMBQ_DATASET
+          value: "prometheus"
+        - name: PROMBQ_TABLE
+          value: "metrics"
+        - name: PROMBQ_TIMEOUT
+          value: "2m"
+      imagePullPolicy: IfNotPresent
+      resources:
+        limits:
+          cpu: "5"
+          memory: "500Mi"
+        requests:
+          cpu: "5"
+          memory: "500Mi"
+      volumeMounts:
+        - name: "service-account"
+          mountPath: "/var/run/secret/cloud.google.com"
+      # securityContext:
+      #   allowPrivilegeEscalation: false
+      #   # User 65532 is the distroless nonroot user ID
+      #   runAsUser: 65532
+  volumes:
+    - name: "service-account"
+      secret:
+        secretName: "write-to-bq-sa-key"
+  remoteWrite:
+    - url: http://localhost:9201/write
+      remoteTimeout: 2m
+      writeRelabelConfigs:
+      - sourceLabels: [__name__]
+        separator: ;
+        regex: ALERTS|apiserver_request_.*|kube_namespace_labels
+        replacement: $1
+        action: keep
+      queueConfig:
+        capacity: 500
+        maxShards: 200
+        minShards: 1
+        maxSamplesPerSend: 100
+        batchSendDeadline: 5s
+        minBackoff: 30ms
+        maxBackoff: 100ms
+  remoteRead:
+    - url: http://localhost:9201/read
+      remoteTimeout: 1m
