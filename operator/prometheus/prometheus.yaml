@@ -10,11 +10,6 @@ spec:
   serviceMonitorSelector:
     matchLabels:
       team: frontend
-  alerting:
-    alertmanagers:
-    - namespace: default
-      name: alertmanager
-      port: web
   containers:
     - name: "prometheus-storage-bigquery"
       image: "quay.io/kohlstechnology/prometheus_bigquery_remote_storage_adapter:latest"
@@ -40,10 +35,10 @@ spec:
       volumeMounts:
         - name: "service-account"
           mountPath: "/var/run/secret/cloud.google.com"
-      # securityContext:
-      #   allowPrivilegeEscalation: false
-      #   # User 65532 is the distroless nonroot user ID
-      #   runAsUser: 65532
+      securityContext:
+        allowPrivilegeEscalation: false
+        # User 65532 is the distroless nonroot user ID
+        runAsUser: 65532
   volumes:
     - name: "service-account"
       secret:
@@ -51,12 +46,6 @@ spec:
   remoteWrite:
     - url: http://localhost:9201/write
       remoteTimeout: 2m
-      writeRelabelConfigs:
-      - sourceLabels: [__name__]
-        separator: ;
-        regex: ALERTS|apiserver_request_.*|kube_namespace_labels
-        replacement: $1
-        action: keep
       queueConfig:
         capacity: 500
         maxShards: 200
